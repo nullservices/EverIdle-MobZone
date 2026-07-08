@@ -108,6 +108,10 @@ const defaultColDef = {
 // =========================================================================
 // Init
 // =========================================================================
+const mapCache = {};
+let mapPopupTimer = null;
+let currentMapZone = null;
+
 document.addEventListener("DOMContentLoaded", () => {
   initGrid();
   loadZones();
@@ -135,6 +139,8 @@ function initGrid() {
       gridColumnApi = params.columnApi;
       // Start empty — user must search
       gridApi.showNoRowsOverlay();
+      // Wire up map hover
+      bindMapPopupEvents();
     },
 
     getRowId: (params) => String(params.data._idx),
@@ -374,9 +380,54 @@ async function onCellEdited(event) {
   const { data, colDef, newValue, oldValue } = event;
   if (newValue === oldValue) return;
 
-  const mobId = data.npc_type_id;
   const field = colDef.field;
 
+  // If multiple rows selected, apply to all
+  const selectedRows = gridApi.getSelectedRows();
+  if (selectedRows.length > 1) {
+    // Update the current cell's data immediately so the grid doesn't revert
+    data[field] = newValue;
+    gridApi.applyTransaction({ update: [data] });
+
+    // Apply to all selected rows
+    const val = newValue;
+    let done = 0, failed = 0;
+    for (const row of selectedRows) {
+      if (row[field] === val) { done++; continue; }
+      try {
+        const res = await fetch(`/api/mobs/${row.npc_type_id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [field]: val }),
+        });
+        if (res.ok) {
+          row[field] = val;
+          done++;
+        } else { failed++; }
+      } catch (e) { failed++; }
+    }
+
+    // Refresh grid to show all changes
+    gridApi.applyTransaction({ update: selectedRows });
+    clearTimeout(saveDebounce);
+    saveDebounce = setTimeout(() => saveData(), SAVE_DEBOUNCE_MS);
+
+    if (field === "CampName" || field === "campId") {
+      loadCamps();
+      loadStats();
+    }
+
+    const label = field === "CampName" ? "Camp Name" : field === "campId" ? "Camp ID" : field;
+    if (failed === 0) {
+      toast(`Set ${label} = "${val}" on ${done} mobs`, "success");
+    } else {
+      toast(`Set ${label} on ${done} mobs (${failed} failed)`, "error");
+    }
+    return;
+  }
+
+  // Single-row edit
+  const mobId = data.npc_type_id;
   try {
     const res = await fetch(`/api/mobs/${mobId}`, {
       method: "PUT",
@@ -386,7 +437,6 @@ async function onCellEdited(event) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     if (json.ok) {
-      // Auto-save to CSV after a short debounce (batches rapid edits)
       clearTimeout(saveDebounce);
       saveDebounce = setTimeout(() => saveData(), SAVE_DEBOUNCE_MS);
 
@@ -893,10 +943,414 @@ function bindKeyboardShortcuts() {
 }
 
 // =========================================================================
-// Helpers
+// Map Popup — hover preview, click to pin + zoom/pan
 // =========================================================================
-function escHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
+let mapPinned = false;
+let mapPinnedMob = null;
+let mapView = { scale: 1, offsetX: 0, offsetY: 0 }; // zoom/pan state
+let mapDragging = false;
+let mapDragStart = { x: 0, y: 0, ox: 0, oy: 0 };
+let mapLayers = [];           // all layers for current zone
+let mapActiveLayer = 0;       // currently visible layer index
+
+function bindMapPopupEvents() {
+  if (!gridApi) return;
+
+  // Hover: preview after 400ms delay (only if not pinned)
+  gridApi.addEventListener("cellMouseOver", (e) => {
+    if (!e.data || mapPinned) return;
+    const data = e.data;
+    if (data.x == null || data.y == null || !data.zone_short_name) return;
+    clearTimeout(mapPopupTimer);
+    mapPopupTimer = setTimeout(() => showMapPopup(data, e.event, false), 400);
+  });
+
+  gridApi.addEventListener("cellMouseOut", () => {
+    if (mapPinned) return;
+    clearTimeout(mapPopupTimer);
+    mapPopupTimer = setTimeout(() => {
+      if (!mapPinned) hideMapPopup();
+    }, 200);
+  });
+
+  // Click on mob NAME cell: pin/unpin map
+  gridApi.addEventListener("cellClicked", (e) => {
+    if (!e.data) return;
+    // Only trigger on mob_name column
+    if (!e.column || e.column.getColId() !== "mob_name") return;
+
+    const data = e.data;
+    if (data.x == null || data.y == null || !data.zone_short_name) return;
+
+    // If same mob is already pinned, unpin
+    if (mapPinned && mapPinnedMob && mapPinnedMob.npc_type_id === data.npc_type_id) {
+      hideMapPopup();
+      return;
+    }
+
+    // Pin this mob's map
+    clearTimeout(mapPopupTimer);
+    showMapPopup(data, e.event, true);
+  });
+
+  // Popup hover keeps preview open
+  const popup = document.getElementById("map-popup");
+  popup.addEventListener("mouseenter", () => clearTimeout(mapPopupTimer));
+  popup.addEventListener("mouseleave", () => {
+    if (!mapPinned) hideMapPopup();
+  });
+
+  // Close button
+  document.getElementById("map-popup-close").addEventListener("click", hideMapPopup);
+
+  // Zoom controls
+  document.getElementById("map-zoom-in").addEventListener("click", () => zoomMap(0.3));
+  document.getElementById("map-zoom-out").addEventListener("click", () => zoomMap(-0.3));
+  document.getElementById("map-zoom-reset").addEventListener("click", resetMapView);
+
+  // Canvas zoom/pan
+  const canvas = document.getElementById("map-canvas");
+  canvas.addEventListener("wheel", onMapWheel, { passive: false });
+  canvas.addEventListener("mousedown", onMapDragStart);
+  canvas.addEventListener("mousemove", onMapDragMove);
+  canvas.addEventListener("mouseup", onMapDragEnd);
+  canvas.addEventListener("mouseleave", onMapDragEnd);
+}
+
+function showMapPopup(mobData, event, pin) {
+  const zone = mobData.zone_short_name;
+  const x = Number(mobData.x);
+  const y = Number(mobData.y);
+
+  mapPinned = !!pin;
+  mapPinnedMob = pin ? mobData : null;
+  if (pin) resetMapView();
+
+  // Position popup
+  const popup = document.getElementById("map-popup");
+  const popupW = 524;
+  const popupH = 580;
+  let left, top;
+
+  if (pin) {
+    // Pinned: center on screen
+    left = (window.innerWidth - popupW) / 2;
+    top = (window.innerHeight - popupH) / 2;
+    if (top < 60) top = 60;
+    popup.classList.add("pinned");
+  } else {
+    // Hover: near cursor
+    left = (event.clientX || event.x) + 20;
+    top = (event.clientY || event.y) - popupH / 2;
+    if (left + popupW > window.innerWidth - 10) left = window.innerWidth - popupW - 10;
+    if (top < 60) top = 60;
+    if (top + popupH > window.innerHeight - 10) top = window.innerHeight - popupH - 10;
+    popup.classList.remove("pinned");
+  }
+
+  popup.style.left = left + "px";
+  popup.style.top = top + "px";
+
+  document.getElementById("map-popup-title").textContent =
+    `${mobData.mob_name} (Lv ${mobData.mob_level}) · ${zone}  [${x.toFixed(0)}, ${y.toFixed(0)}]`;
+  popup.classList.remove("hidden");
+
+  // Fetch and render — auto-detect which layer contains the mob
+  fetchMap(zone).then(mapData => {
+    if (!mapData) { hideMapPopup(); return; }
+    mapLayers = mapData.layers || [];
+    // Find layer containing the mob
+    mapActiveLayer = 0;
+    for (let i = 0; i < mapLayers.length; i++) {
+      const b = mapLayers[i].bounds;
+      if (x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY) {
+        mapActiveLayer = i;
+        break;
+      }
+    }
+    buildLayerTabs();
+    renderCurrentLayer(x, y, mobData.mob_name);
+  });
+}
+
+function hideMapPopup() {
+  document.getElementById("map-popup").classList.add("hidden");
+  document.getElementById("map-popup").classList.remove("pinned");
+  mapPinned = false;
+  mapPinnedMob = null;
+  currentMapZone = null;
+  mapLayers = [];
+  mapActiveLayer = 0;
+  resetMapView();
+}
+
+function buildLayerTabs() {
+  const container = document.getElementById("map-layer-tabs");
+  container.innerHTML = "";
+  if (mapLayers.length <= 1) {
+    container.classList.add("hidden");
+    return;
+  }
+  container.classList.remove("hidden");
+  mapLayers.forEach((layer, i) => {
+    const tab = document.createElement("button");
+    tab.className = "map-layer-tab" + (i === mapActiveLayer ? " active" : "");
+    tab.textContent = layer.name;
+    tab.onclick = () => {
+      mapActiveLayer = i;
+      buildLayerTabs();
+      if (mapPinnedMob) {
+        renderCurrentLayer(Number(mapPinnedMob.x), Number(mapPinnedMob.y), mapPinnedMob.mob_name);
+      }
+    };
+    container.appendChild(tab);
+  });
+}
+
+function renderCurrentLayer(mobX, mobY, mobName) {
+  if (mapActiveLayer < 0 || mapActiveLayer >= mapLayers.length) return;
+  renderMap(mapLayers[mapActiveLayer], mobX, mobY, mobName);
+}
+
+// --- Zoom/Pan ---
+function zoomMap(delta) {
+  mapView.scale = Math.max(0.3, Math.min(5, mapView.scale + delta));
+  document.getElementById("map-zoom-level").textContent = Math.round(mapView.scale * 100) + "%";
+  if (mapPinnedMob) reRenderPinnedMap();
+}
+
+function resetMapView() {
+  mapView = { scale: 1, offsetX: 0, offsetY: 0 };
+  document.getElementById("map-zoom-level").textContent = "100%";
+  if (mapPinnedMob) reRenderPinnedMap();
+}
+
+function onMapWheel(e) {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? -0.15 : 0.15;
+  // Zoom toward cursor position
+  const canvas = document.getElementById("map-canvas");
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+
+  const oldScale = mapView.scale;
+  mapView.scale = Math.max(0.3, Math.min(5, mapView.scale + delta));
+  const ratio = mapView.scale / oldScale;
+
+  mapView.offsetX = cx - ratio * (cx - mapView.offsetX);
+  mapView.offsetY = cy - ratio * (cy - mapView.offsetY);
+
+  document.getElementById("map-zoom-level").textContent = Math.round(mapView.scale * 100) + "%";
+  if (mapPinnedMob) reRenderPinnedMap();
+}
+
+function onMapDragStart(e) {
+  mapDragging = true;
+  mapDragStart = {
+    x: e.clientX,
+    y: e.clientY,
+    ox: mapView.offsetX,
+    oy: mapView.offsetY,
+  };
+  e.preventDefault();
+}
+
+function onMapDragMove(e) {
+  if (!mapDragging) return;
+  mapView.offsetX = mapDragStart.ox + (e.clientX - mapDragStart.x);
+  mapView.offsetY = mapDragStart.oy + (e.clientY - mapDragStart.y);
+  if (mapPinnedMob) reRenderPinnedMap();
+}
+
+function onMapDragEnd() {
+  mapDragging = false;
+}
+
+function reRenderPinnedMap() {
+  if (!mapPinnedMob) return;
+  renderCurrentLayer(Number(mapPinnedMob.x), Number(mapPinnedMob.y), mapPinnedMob.mob_name);
+}
+
+// --- Map Fetching ---
+async function fetchMap(zone) {
+  if (mapCache[zone]) return mapCache[zone];
+  if (mapCache[zone] === null) return null;
+  try {
+    const res = await fetch(`/api/map/${encodeURIComponent(zone)}`);
+    if (!res.ok) { mapCache[zone] = null; return null; }
+    const data = await res.json();
+    mapCache[zone] = data;
+    return data;
+  } catch (e) {
+    mapCache[zone] = null;
+    return null;
+  }
+}
+
+// --- Canvas Rendering ---
+function renderMap(mapData, mobX, mobY, mobName) {
+  const canvas = document.getElementById("map-canvas");
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  const s = mapView.scale;
+
+  // Clear — EQ parchment background
+  ctx.fillStyle = "#c8b898";
+  ctx.fillRect(0, 0, w, h);
+
+  // Subtle parchment texture (noise-like grain)
+  ctx.fillStyle = "rgba(180,160,130,0.08)";
+  for (let i = 0; i < 200; i++) {
+    const gx = Math.random() * w;
+    const gy = Math.random() * h;
+    ctx.fillRect(gx, gy, 2, 2);
+  }
+
+  // Grid lines (EQ-style coordinate grid)
+  ctx.strokeStyle = "rgba(160,140,110,0.25)";
+  ctx.lineWidth = 0.5;
+  const gridSize = 40;
+  for (let gx = gridSize; gx < w; gx += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(gx, 0);
+    ctx.lineTo(gx, h);
+    ctx.stroke();
+  }
+  for (let gy = gridSize; gy < h; gy += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(0, gy);
+    ctx.lineTo(w, gy);
+    ctx.stroke();
+  }
+
+  // Border inside canvas (map frame)
+  ctx.strokeStyle = "#3b2008";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, w - 4, h - 4);
+
+  if (!mapData) {
+    ctx.fillStyle = "#6b5a3e";
+    ctx.font = "bold 15px serif";
+    ctx.textAlign = "center";
+    ctx.fillText("No map available for this zone", w / 2, h / 2);
+    return;
+  }
+
+  const b = mapData.bounds;
+  const mapW = b.maxX - b.minX;
+  const mapH = b.maxY - b.minY;
+  if (mapW <= 0 || mapH <= 0) return;
+
+  // Base scale to fit canvas
+  const pad = 20;
+  const fitScale = Math.min((w - pad * 2) / mapW, (h - pad * 2) / mapH);
+  const baseScale = fitScale;
+  const scale = baseScale * s;
+
+  // Base offset (centered)
+  const baseOX = pad + (w - pad * 2 - mapW * fitScale) / 2;
+  const baseOY = pad + (h - pad * 2 - mapH * fitScale) / 2;
+
+  // Apply zoom/pan: zoom toward center, then add pan offset
+  const cx = w / 2;
+  const cy = h / 2;
+  const ox = cx - s * (cx - baseOX) + mapView.offsetX;
+  const oy = cy - s * (cy - baseOY) + mapView.offsetY;
+
+  function tx(px) { return ox + (px - b.minX) * scale; }
+  function ty(py) { return oy + (py - b.minY) * scale; }
+
+  // Draw lines — darken Brewall colors for parchment visibility
+  for (const line of mapData.lines) {
+    const sx = tx(line.x1), sy = ty(line.y1);
+    const ex = tx(line.x2), ey = ty(line.y2);
+    if ((sx < -50 && ex < -50) || (sx > w + 50 && ex > w + 50) ||
+        (sy < -50 && ey < -50) || (sy > h + 50 && ey > h + 50)) continue;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+
+    // Parse original Brewall color and darken for parchment
+    const orig = line.color || "rgb(150,150,150)";
+    const match = orig.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+    if (match) {
+      // Darken and shift toward brown for EQ parchment look
+      const r = Math.round(parseInt(match[1]) * 0.5 + 40);
+      const g = Math.round(parseInt(match[2]) * 0.45 + 30);
+      const b = Math.round(parseInt(match[3]) * 0.4 + 20);
+      ctx.strokeStyle = `rgb(${r},${g},${b})`;
+    } else {
+      ctx.strokeStyle = "#4a3020";
+    }
+    ctx.lineWidth = Math.max(1, s * 1.2);
+    ctx.stroke();
+  }
+
+  // Draw POI points
+  if (s > 0.5) {
+    for (const pt of mapData.points) {
+      const sx = tx(pt.x), sy = ty(pt.y);
+      if (sx < 0 || sx > w || sy < 0 || sy > h) continue;
+      // Small label dot
+      ctx.fillStyle = "#8b2020";
+      ctx.beginPath();
+      ctx.arc(sx, sy, Math.max(2, s * 2.5), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#3b1008";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+  }
+
+  // Draw mob position — bright marker on parchment
+  if (mobX != null && mobY != null) {
+    const mx = tx(mobX), my = ty(mobY);
+
+    // Outer glow (red pulse on parchment)
+    const glowR = Math.max(10, 18 * s);
+    const gradient = ctx.createRadialGradient(mx, my, 3 * s, mx, my, glowR);
+    gradient.addColorStop(0, "rgba(200,30,30,0.7)");
+    gradient.addColorStop(0.5, "rgba(200,40,20,0.2)");
+    gradient.addColorStop(1, "rgba(200,40,20,0)");
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(mx, my, glowR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Main dot
+    const dotR = Math.max(4, 6 * s);
+    ctx.fillStyle = "#cc2222";
+    ctx.beginPath();
+    ctx.arc(mx, my, dotR, 0, Math.PI * 2);
+    ctx.fill();
+    // Dark border
+    ctx.strokeStyle = "#1a0505";
+    ctx.lineWidth = Math.max(1.5, 2 * s);
+    ctx.stroke();
+    // Inner highlight
+    ctx.fillStyle = "#ff6655";
+    ctx.beginPath();
+    ctx.arc(mx - dotR * 0.25, my - dotR * 0.25, dotR * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Label
+    if (mobName && s > 0.4) {
+      const coordLabel = `${mobName} (${mobX.toFixed(0)}, ${mobY.toFixed(0)})`;
+      const fontSize = Math.max(10, 12 * s);
+      ctx.font = `bold ${fontSize}px serif`;
+      ctx.textAlign = "center";
+      const textW = ctx.measureText(coordLabel).width;
+      const textY = my - dotR - 8;
+      // Parchment-style label background
+      ctx.fillStyle = "rgba(200,180,140,0.9)";
+      ctx.fillRect(mx - textW / 2 - 6, textY - fontSize, textW + 12, fontSize + 6);
+      ctx.strokeStyle = "#3b2008";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(mx - textW / 2 - 6, textY - fontSize, textW + 12, fontSize + 6);
+      ctx.fillStyle = "#4a1010";
+      ctx.fillText(coordLabel, mx, textY);
+    }
+  }
 }

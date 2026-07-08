@@ -128,6 +128,26 @@
   </main>
 </div>
 
+<!-- Map Popup (hover preview → click to pin + zoom/pan) -->
+<div id="map-popup" class="map-popup hidden">
+  <div class="map-popup-header">
+    <span id="map-popup-title"></span>
+    <div class="map-controls">
+      <button id="map-zoom-in" class="map-ctrl-btn" title="Zoom in">+</button>
+      <button id="map-zoom-out" class="map-ctrl-btn" title="Zoom out">&minus;</button>
+      <button id="map-zoom-reset" class="map-ctrl-btn" title="Reset view">↺</button>
+      <button id="map-popup-close" class="map-close-btn">&times;</button>
+    </div>
+  </div>
+  <div id="map-layer-tabs" class="map-layer-tabs"></div>
+  <canvas id="map-canvas" width="500" height="500"></canvas>
+  <div class="map-popup-footer">
+    <span id="map-zoom-level">100%</span>
+    <span class="legend-dot mob-dot"></span> Selected mob
+    <span style="margin-left:8px;font-size:10px;color:var(--text-dim)">Scroll to zoom · Drag to pan</span>
+  </div>
+</div>
+
 <!-- Camp Dialog Modal -->
 <div id="camp-dialog-overlay" class="modal-overlay hidden">
   <div class="modal">

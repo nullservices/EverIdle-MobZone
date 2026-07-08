@@ -15,6 +15,7 @@ from flask import Flask, request, jsonify, render_template
 app = Flask(__name__)
 
 CSV_PATH = Path(__file__).parent / "Mobs and Zones.csv"
+MAPS_DIR = Path(__file__).parent / "maps" / "Brewall"
 CSV_SEP = "|"
 CSV_ENCODING = "utf-8"
 CSV_QUOTE = '"'
@@ -300,6 +301,97 @@ def api_mob_update(mob_id):
 @app.route("/api/camps", methods=["GET"])
 def api_camps():
     return jsonify(camps_cache)
+
+
+# ---------------------------------------------------------------------------
+# Map parsing (Brewall format)
+# ---------------------------------------------------------------------------
+_map_cache: dict[str, dict] = {}
+
+def _parse_map(zone: str) -> dict | None:
+    """Parse all Brewall .txt map layers for a zone.
+    Returns {layers: [{name, lines, points, bounds}, ...]}.
+    Each _1, _2, _3 file is a separate floor/layer with its own coordinate system."""
+    if zone in _map_cache:
+        return _map_cache[zone]
+
+    candidates = [
+        (f"{zone}.txt", "Main"),
+        (f"{zone}_1.txt", "Floor 1"),
+        (f"{zone}_2.txt", "Floor 2"),
+        (f"{zone}_3.txt", "Floor 3"),
+    ]
+
+    layers = []
+
+    for fname, label in candidates:
+        fpath = MAPS_DIR / fname
+        if not fpath.exists():
+            continue
+
+        layer_lines = []
+        layer_points = []
+
+        with open(fpath, "r") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                parts = [p.strip() for p in line.split(",")]
+                try:
+                    if line.startswith("L") and len(parts) >= 7:
+                        # Brewall format: L locY, locX, Z, locY, locX, Z, R, G, B
+                        # locY = north-south, locX = east-west (EQ /loc convention)
+                        y1, x1, z1 = float(parts[0][2:]), float(parts[1]), float(parts[2])
+                        y2, x2, z2 = float(parts[3]), float(parts[4]), float(parts[5])
+                        r = int(parts[6]) if len(parts) > 6 else 150
+                        g = int(parts[7]) if len(parts) > 7 else 150
+                        b = int(parts[8]) if len(parts) > 8 else 150
+                        layer_lines.append({"x1": x1, "y1": y1, "x2": x2, "y2": y2, "color": f"rgb({r},{g},{b})"})
+                    elif line.startswith("P") and len(parts) >= 6:
+                        y, x, z = float(parts[0][2:]), float(parts[1]), float(parts[2])
+                        label_text = parts[-1].strip() if len(parts) >= 9 else ""
+                        layer_points.append({"x": x, "y": y, "label": label_text})
+                except (ValueError, IndexError):
+                    continue
+
+        if not layer_lines and not layer_points:
+            continue
+
+        # Compute bounding box for this layer
+        xs = [l["x1"] for l in layer_lines] + [l["x2"] for l in layer_lines] + [p["x"] for p in layer_points]
+        ys = [l["y1"] for l in layer_lines] + [l["y2"] for l in layer_lines] + [p["y"] for p in layer_points]
+
+        if xs:
+            pad_x = (max(xs) - min(xs)) * 0.05 or 50
+            pad_y = (max(ys) - min(ys)) * 0.05 or 50
+            layers.append({
+                "name": label,
+                "lines": layer_lines,
+                "points": layer_points,
+                "bounds": {
+                    "minX": min(xs) - pad_x, "maxX": max(xs) + pad_x,
+                    "minY": min(ys) - pad_y, "maxY": max(ys) + pad_y,
+                },
+            })
+
+
+    if not layers:
+        _map_cache[zone] = None
+        return None
+
+    result = {"layers": layers}
+    _map_cache[zone] = result
+    return result
+
+
+@app.route("/api/map/<zone>", methods=["GET"])
+def api_map(zone):
+    """Return parsed map data for a zone (Brewall vector format)."""
+    result = _parse_map(zone)
+    if result is None:
+        return jsonify({"error": "No map found"}), 404
+    return jsonify(result)
 
 
 @app.route("/api/suggest", methods=["GET"])
