@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EQ Mob &amp; Camp Manager</title>
+
+<!-- AG Grid Community -->
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.2/dist/ag-grid-community.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.2/styles/ag-theme-alpine.min.css">
+
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<!-- Top Toolbar -->
+<header id="toolbar">
+  <div class="toolbar-left">
+    <h1 class="app-title">⚔️ EQ Mob &amp; Camp Manager</h1>
+    <span id="dirty-indicator" class="dirty hidden" title="Unsaved changes">●</span>
+  </div>
+  <div class="toolbar-right">
+    <button id="btn-save" class="btn btn-primary" title="Save changes (Ctrl+S)">
+      💾 Save
+    </button>
+    <button id="btn-reload" class="btn" title="Discard unsaved changes and reload">
+      🔄 Reload
+    </button>
+    <button id="btn-export" class="btn" title="Export filtered view as CSV">
+      📥 Export
+    </button>
+    <button id="btn-theme" class="btn icon-btn" title="Toggle dark/light mode">
+      🌓
+    </button>
+  </div>
+</header>
+
+<!-- Main Layout -->
+<div id="app-layout">
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <!-- Search -->
+    <div class="sidebar-section">
+      <label class="section-label">🔍 Search</label>
+      <input type="text" id="search-input" class="search-box"
+             placeholder="Name, zone, ID, camp…" autofocus>
+    </div>
+
+    <!-- Filters -->
+    <div class="sidebar-section">
+      <label class="section-label">🎯 Filters</label>
+      <div class="filter-row">
+        <label>Zone</label>
+        <select id="filter-zone">
+          <option value="">All Zones</option>
+        </select>
+      </div>
+      <div class="filter-row level-row">
+        <label>Level</label>
+        <input type="number" id="filter-level-min" class="level-input"
+               min="0" max="100" value="0" placeholder="Min">
+        <span class="level-sep">–</span>
+        <input type="number" id="filter-level-max" class="level-input"
+               min="0" max="100" value="100" placeholder="Max">
+      </div>
+      <div class="filter-row">
+        <label>Camp</label>
+        <select id="filter-has-camp">
+          <option value="">All Mobs</option>
+          <option value="1">Has Camp</option>
+          <option value="0">No Camp</option>
+        </select>
+      </div>
+      <div class="filter-row checkbox-row">
+        <label>
+          <input type="checkbox" id="filter-named">
+          Named / Boss only
+        </label>
+      </div>
+    </div>
+
+    <!-- Camp Tree -->
+    <div class="sidebar-section camp-section">
+      <div class="section-header">
+        <label class="section-label">🏕️ Camps</label>
+        <button id="btn-refresh-camps" class="btn-sm" title="Refresh camp tree">↻</button>
+      </div>
+      <div id="camp-tree" class="camp-tree">
+        <div class="loading-text">Loading camps…</div>
+      </div>
+      <div class="camp-actions">
+        <button id="btn-assign-camp" class="btn btn-sm btn-primary" disabled>
+          Assign to Camp
+        </button>
+        <button id="btn-remove-camp" class="btn btn-sm" disabled>
+          Remove Camp
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="sidebar-section stats-section">
+      <label class="section-label">📊 Stats</label>
+      <div id="stats-panel">
+        <div class="loading-text">Loading stats…</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Grid -->
+  <main id="main-content">
+    <div id="grid-container" class="ag-theme-alpine-dark" style="height:100%;width:100%"></div>
+    <div id="status-bar">
+      <span id="status-left">Ready</span>
+      <span id="status-right"></span>
+    </div>
+  </main>
+</div>
+
+<!-- Camp Dialog Modal -->
+<div id="camp-dialog-overlay" class="modal-overlay hidden">
+  <div class="modal">
+    <h3 id="camp-dialog-title">Assign Camp</h3>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Existing Camps</label>
+        <select id="camp-dialog-existing" class="full-width">
+          <option value="">-- Create new or select --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>New Camp ID</label>
+        <input type="text" id="camp-dialog-id" placeholder="e.g. crushbone_entrance">
+      </div>
+      <div class="form-group">
+        <label>New Camp Name</label>
+        <input type="text" id="camp-dialog-name" placeholder="e.g. Entrance">
+      </div>
+      <p id="camp-dialog-info" class="hint"></p>
+    </div>
+    <div class="modal-footer">
+      <button id="camp-dialog-cancel" class="btn">Cancel</button>
+      <button id="camp-dialog-ok" class="btn btn-primary">Assign</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
