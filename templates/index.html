@@ -20,7 +20,6 @@
 <header id="toolbar">
   <div class="toolbar-left">
     <h1 class="app-title">⚔️ EQ Mob &amp; Camp Manager</h1>
-    <span id="dirty-indicator" class="dirty hidden" title="Unsaved changes">●</span>
   </div>
   <div class="toolbar-right">
     <button id="btn-save" class="btn btn-primary" title="Save changes (Ctrl+S)">
@@ -43,10 +42,12 @@
   <!-- Sidebar -->
   <aside id="sidebar">
     <!-- Search -->
-    <div class="sidebar-section">
+    <div class="sidebar-section search-section">
       <label class="section-label">🔍 Search</label>
       <input type="text" id="search-input" class="search-box"
-             placeholder="Name, zone, ID, camp…" autofocus>
+             placeholder="Name, zone, ID, camp…" autofocus
+             autocomplete="off">
+      <div id="suggestions-dropdown" class="suggestions-dropdown hidden"></div>
     </div>
 
     <!-- Filters -->
@@ -80,6 +81,9 @@
           Named / Boss only
         </label>
       </div>
+      <button id="btn-clear-filters" class="btn btn-sm" style="width:100%;margin-top:4px;">
+        ✕ Clear Filters
+      </button>
     </div>
 
     <!-- Camp Tree -->
@@ -112,6 +116,10 @@
 
   <!-- Main Grid -->
   <main id="main-content">
+    <div id="loading-overlay" class="loading-overlay hidden">
+      <div class="spinner"></div>
+      <span id="loading-text">Loading…</span>
+    </div>
     <div id="grid-container" class="ag-theme-alpine-dark" style="height:100%;width:100%"></div>
     <div id="status-bar">
       <span id="status-left">Ready</span>

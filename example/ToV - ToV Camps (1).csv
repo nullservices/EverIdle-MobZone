@@ -1,0 +1,118 @@
+zone,zoneName,campId,campName,mobId,mob,named,isRaid,weight,lvlMin,lvlMax,
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124109,a cerulean sky gazer,N,,24,64,64,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124044,a cerulean sky gazer,N,,21,60,60,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124023,a fiery temple guardian,N,,10,62,62,Warrior
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124064,a fiery watcher,N,,24,64,64,Warrior
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124082,a fiery watcher,N,,21,60,60,Warrior
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124048,a glimmer drake,N,,21,62,62,Druid
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124002,a glimmering drake,N,,24,64,64,Ranger
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124083,a glimmering drake,N,,21,60,60,Ranger
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124084,a lava dancer,N,,21,62,62,War
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124054,a shimmering green drake,N,,21,62,62,Rogue
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124047,an ancient ice wurm defender,N,,10,62,62,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124055,an ancient sky drake,N,,21,62,62,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124053,an elder onyx drake,N,,21,62,62,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124022,an elder temple defender,N,,10,60,60,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124061,an emerald sky defender,N,,24,64,64,Rogue
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124046,an emerald sky defender,N,,21,60,60,Rogue
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124062,an onyx sky drake,N,,24,64,64,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124059,an onyx sky drake,N,,21,60,60,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c1,Entrance,124063,Arreken Skyward,N,,15,62,62,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124044,a cerulean sky gazer,N,,46,60,60,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124023,a fiery temple guardian,N,,145,62,62,Warrior
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124082,a fiery watcher,N,,46,60,60,Warrior
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124048,a glimmer drake,N,,46,62,62,Druid
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124083,a glimmering drake,N,,46,60,60,Ranger
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124084,a lava dancer,N,,46,62,62,War
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124054,a shimmering green drake,N,,46,62,62,Rog
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124047,an ancient ice wurm defender,N,,145,62,62,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124055,an ancient sky drake,N,,46,62,62,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124053,an elder onyx drake,N,,46,62,62,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124022,an elder temple defender,N,,145,60,60,Clr
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124099,an elder temple defender,N,,145,64,64,War
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124046,an emerald sky defender,N,,46,60,60,Rog
+templeveeshan,The Temple of Veeshan,templeveeshan_c2,West Temple,124059,an onyx sky drake,N,,46,60,60,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c3,West Temple Dragons,124105,Gozzrem,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c3,West Temple Dragons,124104,Telkorenar,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c3,West Temple Dragons,124020,Lendiniara the Keeper,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,?,Zemm,Y,,3,66,66,"This guy is sort of a raid mob, but like... not really"
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124040,Casalen,Y,,11,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124038,Essedera,Y,,11,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124031,Grozzmel,Y,,11,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124035,Krigara,Y,,11,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124036,Lepethida,Y,,11,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124030,Midayor,Y,,11,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124039,Tavekalem,Y,,11,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124034,Ymmeln,Y,,11,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124032,a burning guardian,N,,86,64,64,Warrior
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124097,a cerulean guardian,N,,32,60,60,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124066,a fiery drake,N,,32,60,60,War
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124065,a fiery guardian,N,,86,62,62,Warrior
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124111,a glimmering emerald drake,N,,32,62,62,Rogue
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124029,a greater malevolent drake,N,,32,62,62,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124069,a greater sky drake,N,,32,62,62,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124027,a malevolent drake,N,,32,60,60,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124101,a racnar,N,,32,60,60,War
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124095,a raging wyvern,N,,32,61,61,Rogue
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124100,a shimmer drake,N,,32,62,62,Druid
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124098,a shimmer drake,N,,32,60,60,Ranger
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124025,a tigerclaw racnar,N,,32,60,60,War
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,?,a vehement wyvern,N,,32,66,66,Rogue
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124070,an ancient frost guardian,N,,86,64,64,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124019,an ancient guardian wurm,N,,86,62,62,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124085,an ancient shard wyvern,N,,32,64,66,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124026,an ancient tigerclaw racnar,N,,32,63,63,War
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124067,an elder crimson drake,N,,32,62,62,War
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124068,an elder racnar,N,,32,63,63,War
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124028,an elder shard wyvern,N,,32,61,61,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c4,Halls of Testing,124110,an emerald watcher,N,,32,60,60,Rogue
+templeveeshan,The Temple of Veeshan,templeveeshan_c5,Dozekar the Cursed,124037,Dozekar the Cursed,,Y,,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124081,an ancient guardian,N,,5000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124005,Bryrym,N,,1000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124094,Carx`Vean,N,,1000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124091,Gra`Vloren,N,,1000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124014,Hsrek,N,,1000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124016,Kal`Vunar,N,,1000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124093,Kedrak,N,,1000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124013,Lurian,N,,1000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124090,Mazrien,N,,1000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124012,Nir`Tan,N,,1000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124015,Vukuz,N,,1000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124092,Wel`Wnas,N,,1000,60,60,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124079,A Lava Defender,N,,838,65,65,Monk
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124051,A Sky Defender,N,,838,65,65,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124050,An Emerald Defender,N,,838,65,65,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124052,An Onyx Defender,N,,838,65,65,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124147,Beldion Icewind,Y,,581,65,65,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124018,Cyndor Lightningfang,Y,,581,65,65,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124106,Kalkar of the Maelstrom,Y,,581,65,65,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124009,Malteor Flamecaller,Y,,581,65,65,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124006,Quellod Earthspirit,Y,,581,65,65,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124107,Vyldin Flamereaver,Y,,581,65,65,Monk
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124007,Yrrindor Emerald Claw,Y,,581,65,65,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124003,Zyerek Onyxblood,Y,,581,65,65,
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124044,a cerulean sky gazer,N,,4500,60,60,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124082,a fiery watcher,N,,4500,60,60,Warrior
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124048,a glimmer drake,N,,4500,62,62,Druid
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124083,a glimmering drake,N,,4500,60,60,Ranger
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124084,a lava dancer,N,,4500,62,62,War
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124054,a shimmering green drake,N,,4500,62,62,Rogue
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124055,an ancient sky drake,N,,4500,62,62,Cleric
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124053,an elder onyx drake,N,,4500,62,62,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124046,an emerald sky defender,N,,4500,60,60,Rogue
+templeveeshan,The Temple of Veeshan,templeveeshan_c6,North Temple,124059,an onyx sky drake,N,,4500,60,60,SK
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124010,Aaryonar,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124071,Cekenar,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124011,Dagarn the Destroyer,,,1,70,70,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124004,Eashen of the Sky,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124001,Ikatiar the Venom,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124072,Jorlleag,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124077,Lady Mirenilla,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124076,Lady Nevederia,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124008,Lord Feshlak,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124103,Lord Koi Doken,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124074,Lord Kreizenn,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124017,Lord Vyemm,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124075,Sevalak,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c7,North Temple Dragons,124073,Zlexak,,,1,66,66,
+templeveeshan,The Temple of Veeshan,templeveeshan_c8,Vulak`Aerr,124155,Vulak Aerr,,Y,1,70,70,

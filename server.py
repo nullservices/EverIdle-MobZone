@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 """
-EQ Emulator Mob & Camp Manager — Web Edition
-Flask backend: loads pipe-delimited CSV, serves REST API for AG Grid frontend.
+EQ Emulator Mob & Camp Manager — Web Edition (v3)
+Fast: CSV preloaded at startup, vectorized pandas filtering, bulk JSON serialization.
 """
 
 import sys
-import os
-import json
-import re
-from collections import defaultdict
 from pathlib import Path
-
 import pandas as pd
 from flask import Flask, request, jsonify, render_template
 
@@ -25,163 +20,148 @@ CSV_ENCODING = "utf-8"
 CSV_QUOTE = '"'
 
 # ---------------------------------------------------------------------------
-# Global in-memory state
+# In-memory state (loaded at startup)
 # ---------------------------------------------------------------------------
-df: pd.DataFrame | None = None
-camps: dict[str, dict[str, str]] = {}          # zone -> {camp_id: camp_name}
-camp_assignments: dict[str, str] = {}           # npc_type_id (str) -> camp_id
-modified_mobs: set[str] = set()                 # npc_type_ids with unsaved changes
+df: pd.DataFrame = None          # full DataFrame
+df_lower: dict[str, pd.Series] = {}  # lowercase precomputed text columns
 file_path: Path | None = None
+zones_list: list[str] = []
+camps_cache: list[dict] = []
 
-
-# ---------------------------------------------------------------------------
-# Data loading
-# ---------------------------------------------------------------------------
-
-def load_csv(path: Path | str | None = None) -> bool:
-    """Load the mob CSV into memory and parse camp data."""
-    global df, camps, camp_assignments, modified_mobs, file_path
-
-    src = Path(path) if path else CSV_PATH
-    if not src.exists():
-        print(f"ERROR: File not found: {src}")
-        return False
-
-    try:
-        df = pd.read_csv(
-            src, sep=CSV_SEP, encoding=CSV_ENCODING,
-            quotechar=CSV_QUOTE, on_bad_lines="skip",
-        )
-        file_path = src
-    except Exception as e:
-        print(f"ERROR loading CSV: {e}")
-        return False
-
-    # Convert npc_type_id to string for consistent lookups
-    df["npc_type_id"] = df["npc_type_id"].astype(str)
-
-    # Parse existing camps from spawn_group_id / spawn_group_name
-    camps = defaultdict(dict)
-    camp_assignments = {}
-    for _, row in df.iterrows():
-        gid = row.get("spawn_group_id")
-        gname = row.get("spawn_group_name")
-        mob_id = str(row["npc_type_id"])
-        zone = str(row.get("zone_short_name", "unknown"))
-        if pd.notna(gid) and pd.notna(gname) and mob_id:
-            gid_str = str(int(gid)) if isinstance(gid, float) else str(gid)
-            camps[zone][gid_str] = str(gname)
-            camp_assignments[mob_id] = gid_str
-
-    camps = dict(camps)
-    modified_mobs = set()
-    print(f"Loaded {len(df):,} rows from {src}, {len(camp_assignments)} camp assignments")
-    return True
-
-
-def save_csv(path: Path | str | None = None) -> bool:
-    """Persist current state back to CSV, preserving pipe-delimited format."""
-    global df, file_path, modified_mobs
-
-    if df is None:
-        return False
-
-    dest = Path(path) if path else file_path
-    if dest is None:
-        return False
-
-    try:
-        # Write spawn_group_id / spawn_group_name back from camp assignments
-        for idx, row in df.iterrows():
-            mob_id = str(row["npc_type_id"])
-            zone = str(row.get("zone_short_name", "unknown"))
-            if mob_id in camp_assignments:
-                cid = camp_assignments[mob_id]
-                cname = camps.get(zone, {}).get(cid, "")
-                df.at[idx, "spawn_group_id"] = cid
-                df.at[idx, "spawn_group_name"] = cname
-            else:
-                # Clear camp fields for mobs that were unassigned
-                if mob_id in modified_mobs:
-                    df.at[idx, "spawn_group_id"] = ""
-                    df.at[idx, "spawn_group_name"] = ""
-
-        df.to_csv(dest, sep=CSV_SEP, index=False, encoding=CSV_ENCODING, quotechar=CSV_QUOTE)
-        file_path = dest
-        modified_mobs = set()
-        return True
-    except Exception as e:
-        print(f"ERROR saving CSV: {e}")
-        return False
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-COLUMNS = [
+ALL_COLUMNS = [
     "npc_type_id", "mob_name", "mob_level", "loottable_id",
     "spawn_group_id", "spawn_group_name", "spawn2_id",
     "x", "y", "z", "heading", "respawntime", "spawn_chance",
     "zone_id", "zone_short_name", "zone_name", "expansion",
+    "CampName", "campId",
 ]
 
-EDITABLE_COLUMNS = [
-    "mob_name", "mob_level", "x", "y", "z", "heading",
-    "respawntime", "spawn_chance",
+# Columns to include in API responses (skip heavy internal fields)
+API_COLUMNS = [
+    "npc_type_id", "mob_name", "mob_level",
+    "zone_short_name", "zone_name",
+    "CampName", "campId",
+    "x", "y", "z", "heading",
+    "spawn_chance", "respawntime",
+    "spawn_group_id", "spawn_group_name",
+    "loottable_id", "spawn2_id", "zone_id", "expansion",
 ]
 
-DISPLAY_COLUMNS = COLUMNS + ["camp"]  # "camp" is computed
+# =========================================================================
+# Startup — load once
+# =========================================================================
+def load_all():
+    global df, df_lower, file_path, zones_list, camps_cache
+
+    src = CSV_PATH
+    if not src.exists():
+        print(f"ERROR: CSV not found: {src}")
+        return False
+
+    print(f"Loading {src} …", end=" ", flush=True)
+    df = pd.read_csv(
+        src, sep=CSV_SEP, encoding=CSV_ENCODING,
+        quotechar=CSV_QUOTE, on_bad_lines="skip",
+        dtype={"CampName": object, "campId": object},
+    )
+    file_path = src
+
+    # Normalize types once
+    df["npc_type_id"] = df["npc_type_id"].astype(str)
+    for col in ["CampName", "campId"]:
+        if col in df.columns:
+            df[col] = df[col].astype(object).fillna("")
+
+    # Precompute lowercase text columns (avoids .astype(str).str.lower() on every filter)
+    df_lower = {}
+    for col in ["mob_name", "zone_name", "zone_short_name", "CampName", "campId", "npc_type_id"]:
+        if col in df.columns:
+            df_lower[col] = df[col].astype(str).str.lower()
+
+    # Precompute has_camp mask
+    df_lower["_has_camp"] = df["CampName"].astype(str).str.strip().ne("")
+
+    # Cache zones
+    zones_list = sorted(
+        z for z in df["zone_short_name"].dropna().unique().tolist()
+        if str(z) != "nan"
+    )
+
+    # Cache camps
+    camps_cache = _build_camps()
+
+    print(f"done ({len(df):,} rows, {len(zones_list)} zones, {len(camps_cache)} camp zones)")
+    return True
 
 
-def _row_to_dict(idx: int, row: pd.Series) -> dict:
-    """Convert a DataFrame row to a JSON-safe dict with computed camp field."""
-    d = {}
-    for col in COLUMNS:
-        val = row.get(col)
-        if pd.isna(val):
-            d[col] = None
-        elif isinstance(val, (int, float)):
-            d[col] = val
-        else:
-            d[col] = str(val)
-    # Ensure npc_type_id is string
-    d["npc_type_id"] = str(row["npc_type_id"])
+def _build_camps():
+    """Build camp cache from CampName/campId columns."""
+    if "campId" not in df.columns:
+        return []
+    mask = df_lower["_has_camp"]
+    camp_rows = df[mask].copy()
+    if camp_rows.empty:
+        return []
 
-    # Computed camp field
-    mob_id = d["npc_type_id"]
-    cid = camp_assignments.get(mob_id, "")
-    zone = d.get("zone_short_name") or "unknown"
-    cname = camps.get(zone, {}).get(cid, "") if cid else ""
-    d["camp"] = f"{cname} ({cid})" if cid else ""
-    d["camp_id"] = cid
-    d["camp_name"] = cname
-    return d
+    camp_rows["campId"] = camp_rows["campId"].astype(str).str.strip()
+    camp_rows["CampName"] = camp_rows["CampName"].astype(str).str.strip()
+
+    result = []
+    for zone_name, zg in camp_rows.groupby("zone_short_name"):
+        camp_list = []
+        for cid, cg in zg.groupby("campId"):
+            camp_list.append({
+                "id": cid,
+                "name": cg["CampName"].iloc[0],
+                "mob_count": len(cg),
+            })
+        result.append({
+            "zone": str(zone_name),
+            "camps": sorted(camp_list, key=lambda x: x["name"]),
+        })
+    return sorted(result, key=lambda x: x["zone"])
 
 
-def _filter_df(params: dict):
-    """Apply filters to a copy of df; return filtered DataFrame."""
-    if df is None:
-        return pd.DataFrame()
+def save_df() -> bool:
+    if df is None or file_path is None:
+        return False
+    df.to_csv(file_path, sep=CSV_SEP, index=False,
+              encoding=CSV_ENCODING, quotechar=CSV_QUOTE)
+    return True
 
-    f = df.copy()
+
+def reload_all():
+    global df, df_lower, zones_list, camps_cache
+    df = None
+    df_lower = {}
+    zones_list = []
+    camps_cache = []
+    return load_all()
+
+
+# =========================================================================
+# Fast filtering — vectorized, no copies until final step
+# =========================================================================
+def fast_filter(params: dict) -> pd.DataFrame:
+    """Apply filters using precomputed lowercase columns. Returns filtered DataFrame."""
+    # Start with all rows, build a boolean mask
+    mask = pd.Series(True, index=df.index)
 
     # Text search
     search = (params.get("search") or "").strip().lower()
     if search:
-        mask = (
-            f["mob_name"].astype(str).str.lower().str.contains(search, na=False)
-            | f["zone_name"].astype(str).str.lower().str.contains(search, na=False)
-            | f["zone_short_name"].astype(str).str.lower().str.contains(search, na=False)
-            | f["npc_type_id"].astype(str).str.contains(search, na=False)
-            | f["spawn_group_name"].astype(str).str.lower().str.contains(search, na=False)
-        )
-        f = f[mask]
+        search_mask = pd.Series(False, index=df.index)
+        for col in ["mob_name", "zone_name", "zone_short_name", "CampName", "campId"]:
+            if col in df_lower:
+                search_mask |= df_lower[col].str.contains(search, na=False, regex=False)
+        # npc_type_id is exact (not lowercase)
+        search_mask |= df["npc_type_id"].astype(str).str.contains(search, na=False, regex=False)
+        mask &= search_mask
 
-    # Zone filter
+    # Zone
     zone = (params.get("zone") or "").strip()
     if zone:
-        f = f[f["zone_short_name"].astype(str) == zone]
+        mask &= df_lower.get("zone_short_name", df["zone_short_name"].astype(str).str.lower()) == zone.lower()
 
     # Level range
     try:
@@ -193,38 +173,56 @@ def _filter_df(params: dict):
     except (ValueError, TypeError):
         lmax = 999
     if lmin > 0 or lmax < 999:
-        lvl = pd.to_numeric(f["mob_level"], errors="coerce").fillna(0)
-        f = f[(lvl >= lmin) & (lvl <= lmax)]
+        lvl = pd.to_numeric(df["mob_level"], errors="coerce").fillna(0)
+        mask &= (lvl >= lmin) & (lvl <= lmax)
 
     # Named only
     if params.get("named") in ("true", "1", True):
-        f = f[
-            f["mob_name"].astype(str).str.contains(
-                "|".join(["#", "named", "boss", "guardian"]),
-                case=False, na=False,
-            )
-        ]
+        mask &= df_lower.get("mob_name", df["mob_name"].astype(str).str.lower()).str.contains(
+            "|".join(["#", "named", "boss", "guardian"]),
+            case=False, na=False, regex=True,
+        )
 
-    # Camp assignment filter
+    # Has camp
     has_camp = params.get("has_camp")
     if has_camp == "1":
-        f = f[f["npc_type_id"].astype(str).isin(camp_assignments.keys())]
+        mask &= df_lower["_has_camp"]
     elif has_camp == "0":
-        f = f[~f["npc_type_id"].astype(str).isin(camp_assignments.keys())]
+        mask &= ~df_lower["_has_camp"]
 
-    # Specific camp filter
+    # Specific camp
     camp_id = (params.get("camp_id") or "").strip()
     if camp_id:
-        f = f[f["npc_type_id"].astype(str).map(
-            lambda mid: camp_assignments.get(mid, "") == camp_id
-        )]
+        mask &= df["campId"].astype(str).str.strip() == camp_id
 
-    return f
+    # Apply mask and sort
+    return df.loc[mask].sort_values("npc_type_id")
 
 
-# ---------------------------------------------------------------------------
+# =========================================================================
+# Fast JSON serialization — bulk to_dict
+# =========================================================================
+def rows_to_json(filtered: pd.DataFrame, start: int, end: int) -> list[dict]:
+    """Convert a slice of filtered DataFrame to list of JSON-safe dicts."""
+    chunk = filtered.iloc[start:end][API_COLUMNS]
+    # Replace NaN with None so JSON outputs null (not NaN which is invalid JSON)
+    chunk = chunk.where(chunk.notna(), None)
+    records = chunk.to_dict(orient="records")
+    # Add _idx from original index, clean up types
+    idxs = chunk.index.tolist()
+    for i, rec in enumerate(records):
+        rec["_idx"] = int(idxs[i])
+        rec["npc_type_id"] = str(rec.get("npc_type_id", ""))
+        # Empty strings for text fields with None
+        for fld in ["CampName", "campId"]:
+            if rec.get(fld) is None:
+                rec[fld] = ""
+    return records
+
+
+# =========================================================================
 # API Routes
-# ---------------------------------------------------------------------------
+# =========================================================================
 
 @app.route("/")
 def index():
@@ -233,271 +231,182 @@ def index():
 
 @app.route("/api/mobs", methods=["GET"])
 def api_mobs():
-    """Return filtered mob data. Supports server-side pagination if
-    page/page_size are provided; otherwise returns all rows."""
     if df is None:
-        return jsonify({"error": "No data loaded"}), 500
+        return jsonify({"error": "Data not loaded"}), 500
 
-    filtered = _filter_df(request.args)
+    params = dict(request.args)
+    has_filters = any(
+        params.get(k) for k in ["search", "zone", "camp_id"]
+    ) or params.get("level_min", "0") != "0" or params.get("level_max", "100") != "100" \
+      or params.get("named") or params.get("has_camp")
 
-    # Sort by npc_type_id for consistent ordering
-    filtered = filtered.sort_values("npc_type_id")
+    if not has_filters:
+        return jsonify({
+            "rows": [], "total": 0,
+            "hint": "Type a search term or select a filter to begin.",
+            "grand_total": len(df),
+        })
 
+    filtered = fast_filter(params)
     total = len(filtered)
 
-    # Pagination (optional — client may request all)
-    page = request.args.get("page", type=int)
-    page_size = request.args.get("page_size", type=int)
-    if page is not None and page_size is not None:
-        start = (page - 1) * page_size
-        end = start + page_size
-        page_data = filtered.iloc[start:end]
-    else:
-        page_data = filtered
+    page = max(1, request.args.get("page", type=int, default=1))
+    page_size = min(max(1, request.args.get("page_size", type=int, default=500)), 2000)
+    start = (page - 1) * page_size
+    rows = rows_to_json(filtered, start, start + page_size)
 
-    rows = [_row_to_dict(idx, row) for idx, row in page_data.iterrows()]
-    return jsonify({"total": total, "rows": rows})
+    return jsonify({"rows": rows, "total": total, "page": page, "page_size": page_size, "grand_total": len(df)})
 
 
 @app.route("/api/mobs/<mob_id>", methods=["GET"])
 def api_mob_get(mob_id):
-    """Get a single mob by npc_type_id."""
     if df is None:
-        return jsonify({"error": "No data loaded"}), 500
-
+        return jsonify({"error": "Data not loaded"}), 500
     match = df[df["npc_type_id"].astype(str) == str(mob_id)]
     if match.empty:
-        return jsonify({"error": "Mob not found"}), 404
-
-    row = _row_to_dict(match.index[0], match.iloc[0])
-    row["_df_index"] = int(match.index[0])
-    return jsonify(row)
+        return jsonify({"error": "Not found"}), 404
+    rows = rows_to_json(match, 0, 1)
+    return jsonify(rows[0])
 
 
 @app.route("/api/mobs/<mob_id>", methods=["PUT"])
 def api_mob_update(mob_id):
-    """Update fields on a single mob. Body: {field: value, ...}"""
-    global modified_mobs
     if df is None:
-        return jsonify({"error": "No data loaded"}), 500
-
+        return jsonify({"error": "Data not loaded"}), 500
     match = df[df["npc_type_id"].astype(str) == str(mob_id)]
     if match.empty:
-        return jsonify({"error": "Mob not found"}), 404
+        return jsonify({"error": "Not found"}), 404
 
     body = request.get_json(silent=True)
     if not body:
         return jsonify({"error": "No JSON body"}), 400
 
     idx = match.index[0]
-    updated_fields = []
+    updated = []
     for field, value in body.items():
-        if field in COLUMNS:
+        if field in ALL_COLUMNS:
             df.at[idx, field] = value
-            updated_fields.append(field)
-            modified_mobs.add(str(mob_id))
+            # Update lowercase cache if this is a text column
+            if field in df_lower:
+                df_lower[field].at[idx] = str(value).lower() if value else ""
+            if field == "CampName":
+                df_lower["_has_camp"].at[idx] = bool(str(value).strip())
+            updated.append(field)
 
-    return jsonify({
-        "ok": True,
-        "updated": updated_fields,
-        "mob": _row_to_dict(idx, df.iloc[idx]),
-    })
-
-
-@app.route("/api/zones", methods=["GET"])
-def api_zones():
-    if df is None:
-        return jsonify([])
-    zones = sorted(df["zone_short_name"].dropna().unique().tolist())
-    return jsonify([z for z in zones if str(z) != "nan"])
+    rows = rows_to_json(df.loc[[idx]], 0, 1)
+    return jsonify({"ok": True, "updated": updated, "mob": rows[0]})
 
 
 @app.route("/api/camps", methods=["GET"])
 def api_camps():
-    """Return all camps as nested zone -> camps list."""
-    result = []
-    for zone_name, zone_camps in sorted(camps.items()):
-        camp_list = []
-        for cid, cname in sorted(zone_camps.items()):
-            # Count mobs in this camp
-            count = sum(
-                1 for mid, ac in camp_assignments.items()
-                if ac == cid
-            )
-            camp_list.append({"id": cid, "name": cname, "mob_count": count})
-        result.append({"zone": zone_name, "camps": camp_list})
-    return jsonify(result)
+    return jsonify(camps_cache)
 
 
-@app.route("/api/camps/assign", methods=["POST"])
-def api_camps_assign():
-    """Assign mobs to a camp. Body: {mob_ids: [...], camp_id: str, camp_name: str, zone: str}"""
-    global modified_mobs
-    body = request.get_json(silent=True)
-    if not body:
-        return jsonify({"error": "No JSON body"}), 400
+@app.route("/api/suggest", methods=["GET"])
+def api_suggest():
+    """Fast autocomplete — returns top matches across names, zones, camps, IDs."""
+    if df is None:
+        return jsonify([])
 
-    mob_ids = body.get("mob_ids", [])
-    camp_id = str(body.get("camp_id", ""))
-    camp_name = str(body.get("camp_name", ""))
-    zone = str(body.get("zone", "unknown"))
+    q = (request.args.get("q") or "").strip().lower()
+    if len(q) < 1:
+        return jsonify([])
 
-    if not mob_ids or not camp_id or not camp_name:
-        return jsonify({"error": "mob_ids, camp_id, camp_name required"}), 400
+    suggestions = []
+    seen = set()
 
-    # Ensure camps dict has the zone and camp
-    camps.setdefault(zone, {})[camp_id] = camp_name
+    def add(text, kind, secondary=""):
+        key = (text.lower(), kind)
+        if key in seen:
+            return
+        seen.add(key)
+        suggestions.append({"text": str(text), "kind": kind, "secondary": str(secondary)})
 
-    assigned = 0
-    for mid in mob_ids:
-        mid = str(mid)
-        # Verify mob exists and is in the right zone
-        match = df[df["npc_type_id"].astype(str) == mid]
-        if match.empty:
-            continue
-        mob_zone = str(match.iloc[0].get("zone_short_name", "unknown"))
-        if mob_zone != zone and zone != "unknown":
-            continue
+    # Match mob names (most useful)
+    mask = df_lower["mob_name"].str.contains(q, na=False, regex=False)
+    matches = df.loc[mask, ["mob_name", "zone_short_name", "npc_type_id"]].drop_duplicates("mob_name")
+    for _, r in matches.head(8).iterrows():
+        add(r["mob_name"], "mob", str(r["zone_short_name"]))
 
-        if camp_assignments.get(mid) != camp_id:
-            camp_assignments[mid] = camp_id
-            modified_mobs.add(mid)
-            assigned += 1
+    # Match zone short names
+    mask = df_lower["zone_short_name"].str.contains(q, na=False, regex=False)
+    matches = df.loc[mask, "zone_short_name"].dropna().unique()[:5]
+    for z in matches:
+        add(z, "zone")
 
-    return jsonify({"ok": True, "assigned": assigned})
+    # Match zone full names
+    mask = df_lower["zone_name"].str.contains(q, na=False, regex=False)
+    matches = df.loc[mask, ["zone_name", "zone_short_name"]].drop_duplicates("zone_name").head(3)
+    for _, r in matches.iterrows():
+        add(r["zone_name"], "zone_full", str(r["zone_short_name"]))
 
+    # Match camp names
+    mask = df_lower["CampName"].str.contains(q, na=False, regex=False)
+    matches = df.loc[mask, ["CampName", "campId"]].drop_duplicates("CampName").head(4)
+    for _, r in matches.iterrows():
+        if r["CampName"] and str(r["CampName"]).strip():
+            add(r["CampName"], "camp", str(r.get("campId", "")))
 
-@app.route("/api/camps/remove", methods=["POST"])
-def api_camps_remove():
-    """Remove camp assignments from mobs. Body: {mob_ids: [...]}"""
-    global modified_mobs
-    body = request.get_json(silent=True)
-    if not body:
-        return jsonify({"error": "No JSON body"}), 400
+    # Match by NPC ID (exact prefix)
+    mask = df["npc_type_id"].astype(str).str.startswith(q, na=False)
+    matches = df.loc[mask, ["npc_type_id", "mob_name"]].drop_duplicates("npc_type_id").head(3)
+    for _, r in matches.iterrows():
+        add(str(r["npc_type_id"]), "id", str(r["mob_name"]))
 
-    mob_ids = body.get("mob_ids", [])
-    removed = 0
-    for mid in mob_ids:
-        mid = str(mid)
-        if mid in camp_assignments:
-            del camp_assignments[mid]
-            modified_mobs.add(mid)
-            removed += 1
-
-    return jsonify({"ok": True, "removed": removed})
+    return jsonify(suggestions[:12])
 
 
-@app.route("/api/camps/<camp_id>", methods=["DELETE"])
-def api_camp_delete(camp_id):
-    """Delete a camp entirely and unassign all its mobs."""
-    global modified_mobs
-    # Find which zone this camp belongs to
-    for zone_name, zone_camps in camps.items():
-        if camp_id in zone_camps:
-            # Unassign all mobs
-            for mid, cid in list(camp_assignments.items()):
-                if cid == camp_id:
-                    del camp_assignments[mid]
-                    modified_mobs.add(mid)
-            del zone_camps[camp_id]
-            return jsonify({"ok": True, "deleted": camp_id})
-
-    return jsonify({"error": "Camp not found"}), 404
-
-
-@app.route("/api/camps/<camp_id>", methods=["PUT"])
-def api_camp_rename(camp_id):
-    """Rename a camp. Body: {name: str}"""
-    body = request.get_json(silent=True)
-    new_name = (body or {}).get("name", "").strip()
-    if not new_name:
-        return jsonify({"error": "name required"}), 400
-
-    for zone_camps in camps.values():
-        if camp_id in zone_camps:
-            zone_camps[camp_id] = new_name
-            return jsonify({"ok": True, "name": new_name})
-
-    return jsonify({"error": "Camp not found"}), 404
+@app.route("/api/zones", methods=["GET"])
+def api_zones():
+    return jsonify(zones_list)
 
 
 @app.route("/api/stats", methods=["GET"])
 def api_stats():
-    """Return summary statistics."""
     if df is None:
         return jsonify({"error": "No data"}), 500
-
     total = len(df)
-    assigned = len(camp_assignments)
-    zones = df["zone_short_name"].dropna().nunique()
-    zone_dist = (
-        df["zone_short_name"]
-        .value_counts()
-        .head(20)
-        .to_dict()
-    )
-    level_dist = (
-        pd.to_numeric(df["mob_level"], errors="coerce")
-        .dropna()
-        .value_counts()
-        .sort_index()
-        .to_dict()
-    )
-    # Convert numpy ints to regular ints
-    level_dist = {int(k): int(v) for k, v in level_dist.items()}
-    zone_dist = {str(k): int(v) for k, v in zone_dist.items()}
-
+    assigned = int(df_lower.get("_has_camp", pd.Series(False)).sum())
+    top_zones = {str(k): int(v) for k, v in df["zone_short_name"].value_counts().head(10).to_dict().items()}
     return jsonify({
-        "total_mobs": int(total),
-        "total_zones": int(zones),
-        "camp_assignments": assigned,
+        "total_mobs": total,
+        "total_zones": len(zones_list),
+        "camp_assigned_rows": assigned,
         "coverage_pct": round(assigned / total * 100, 1) if total else 0,
-        "dirty_count": len(modified_mobs),
-        "top_zones": zone_dist,
-        "level_distribution": level_dist,
+        "top_zones": top_zones,
     })
 
 
 @app.route("/api/save", methods=["POST"])
 def api_save():
-    """Persist to CSV. Returns count of saved changes."""
-    if df is None:
-        return jsonify({"error": "No data loaded"}), 500
-
-    dirty = len(modified_mobs)
-    ok = save_csv()
-    if ok:
-        return jsonify({"ok": True, "saved_changes": dirty, "path": str(file_path)})
+    # Rebuild caches after save
+    if save_df():
+        reload_all()
+        return jsonify({"ok": True})
     return jsonify({"error": "Save failed"}), 500
 
 
 @app.route("/api/reload", methods=["POST"])
 def api_reload():
-    """Discard unsaved changes and reload from disk."""
-    ok = load_csv(file_path)
-    if ok:
+    if reload_all():
         return jsonify({"ok": True, "rows": len(df)})
     return jsonify({"error": "Reload failed"}), 500
 
 
-# ---------------------------------------------------------------------------
+# =========================================================================
 # Startup
-# ---------------------------------------------------------------------------
-
+# =========================================================================
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="EQ Mob Manager Web Server")
-    parser.add_argument("--csv", type=str, default=None, help="Path to CSV file")
-    parser.add_argument("--port", type=int, default=5000, help="Server port")
-    parser.add_argument("--debug", action="store_true", help="Debug mode")
+    parser = argparse.ArgumentParser(description="EQ Mob Manager")
+    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
-    path = args.csv or CSV_PATH
-    if not load_csv(path):
-        print("Failed to load CSV. Starting with empty dataset.")
-    else:
-        print(f"Ready. Open http://localhost:{args.port} in your browser.")
+    if not load_all():
+        print("WARNING: Starting without data. API calls will fail until data is loaded.")
 
+    print(f"Ready. Open http://localhost:{args.port}")
     app.run(host="127.0.0.1", port=args.port, debug=args.debug)
 
 
