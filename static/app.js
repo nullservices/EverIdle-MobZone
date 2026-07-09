@@ -956,9 +956,10 @@ let mapActiveLayer = 0;       // currently visible layer index
 function bindMapPopupEvents() {
   if (!gridApi) return;
 
-  // Hover: preview after 400ms delay (only if not pinned)
+  // Hover: preview after 400ms delay (only if not pinned, only on mob_name)
   gridApi.addEventListener("cellMouseOver", (e) => {
     if (!e.data || mapPinned) return;
+    if (!e.column || e.column.getColId() !== "mob_name") return;
     const data = e.data;
     if (data.x == null || data.y == null || !data.zone_short_name) return;
     clearTimeout(mapPopupTimer);
